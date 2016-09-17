@@ -109,24 +109,42 @@ int main(int argc,char* argv[])
             //新用户连接到来
             if(sockfd == listenfd)
             {
-                struct sockaddr_in client_addr;
-                socklen_t client_addrlength = sizeof(client_addr);
-                int connfd = accept(listenfd, (struct sockaddr*)&client_addr, &client_addrlength);
-                addfd(epollfd, connfd, true);
-
-                printf("New client %d connect from %s:%d\n",connfd, inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
-                //用户数太多，关闭新的连接
-                if(user_count >= USER_LIMIT)
+                while(1)
                 {
-                    const char* info ="Too many users\n";
-                    printf("%s",info);
-                    send(connfd, info, strlen(info), 0);
-                    close(connfd);
-                    continue;
+                    struct sockaddr_in client_addr;
+                    socklen_t client_addrlength = sizeof(client_addr);
+                    int connfd = accept(listenfd, (struct sockaddr*)&client_addr, &client_addrlength);
+                    if(connfd < 0)
+                    {
+                        if(errno == EAGAIN || errno == EWOULDBLOCK)
+                        {
+                            //所有连接读取完毕,退出循环
+                            break;
+                        }
+                        else
+                        {
+                            perror("Accept failed.");
+                            exit(1);
+                        }
+
+                    }
+                    addfd(epollfd, connfd, true);
+
+                    printf("New client %d connect from %s:%d\n",connfd, inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
+                    //用户数太多，关闭新的连接
+                    if(user_count >= USER_LIMIT)
+                    {
+                        const char* info ="Too many users\n";
+                        printf("%s",info);
+                        send(connfd, info, strlen(info), 0);
+                        close(connfd);
+                        continue;
+                    }
+                    //保存新用户
+                    add_user(&users, &user_count, connfd);
+                    printf("New user %d coming in, now there have %d users in chatroom\n", connfd, user_count);
                 }
-                //保存新用户
-                add_user(&users, &user_count, connfd);
-                printf("New user %d coming in, now there have %d users in chatroom\n", connfd, user_count);
+                
 
             }
             else if(events[i].events & EPOLLIN)
